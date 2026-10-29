@@ -1,6 +1,10 @@
 # uav-telemetry-anomaly-c
 
-Offline anomaly screen for UAV GNSS/air-data telemetry logs. C99, no dependencies beyond libc and libm.
+[![ci](https://github.com/cankaan120/uav-telemetry-anomaly-c/actions/workflows/ci.yml/badge.svg)](https://github.com/cankaan120/uav-telemetry-anomaly-c/actions/workflows/ci.yml)
+![C99](https://img.shields.io/badge/std-C99-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+Offline anomaly screen for UAV GNSS telemetry logs. C99, no dependencies beyond libc and libm, no dynamic allocation.
 
 ## Overview
 
@@ -12,22 +16,49 @@ Offline anomaly screen for UAV GNSS/air-data telemetry logs. C99, no dependencie
 | `EWJ` | Electronic-warfare jamming signature: correlated C/N0 loss and HDOP growth. |
 | `TBE` | Timebase error: non-monotonic or duplicate timestamps. |
 
-Input schema (header row required):
+Input schema (header row required, `#` lines ignored):
 
 ```
 t_s,lat_deg,lon_deg,alt_m,cn0_dbhz,hdop,sats
 ```
 
+Records are rejected, with a `file:line` diagnostic on `stderr`, if they have the wrong field count, trailing fields, exceed 255 bytes, or carry out-of-range values (`|lat| > 90`, `|lon| > 180`, `C/N0` outside 0-60 dB-Hz, `HDOP <= 0`). A single bad record never aborts the run.
+
 ## Build & Execution
+
+Requires a C99 compiler and GNU Make. Tested with GCC and Clang on Ubuntu (CI) and GCC 16 / MinGW-w64 on Windows (use `mingw32-make`).
 
 ```
 make
 ./bin/telemetry_monitor data/flight_log_04.csv
 ```
 
-The log path defaults to `data/flight_log_04.csv` when omitted. `make run` builds and runs against the default log. On Windows with MinGW-w64, use `mingw32-make`.
+The log path defaults to `data/flight_log_04.csv` when omitted.
 
-Exit status: `0` on successful analysis, `1` on I/O or parse failure. Diagnostics go to `stderr`.
+| Target | Action |
+|--------|--------|
+| `make` | Build `bin/telemetry_monitor` |
+| `make run` | Build and run against the reference log |
+| `make test` | Build and run unit tests |
+| `make sanitize` | Rebuild under ASan + UBSan, run tests and reference log |
+| `make clean` | Remove `bin/` and `obj/` |
+
+`EXTRA_CFLAGS` appends compiler flags, e.g. `make EXTRA_CFLAGS=-Werror`.
+
+Exit status: `0` on successful analysis, `1` on I/O failure or no usable frames.
+
+## Verification
+
+`tests/test_telemetry.c` covers:
+
+- `window_stats` against hand-computed mean and unbiased sigma, including `n = 0` and `n = 1`
+- `J` identity at baseline and the closed-form case `dC/N0 = 20 log10 2`, `HDOP x2` giving `J = 4`
+- Zero false positives on noisy level flight
+- Altitude step in and out (hard bound), and an 8 m/s step caught by the z-score bound alone
+- C/N0 floor and duplicate-timestamp detection
+- Parser rejection of short, long, oversize and out-of-range records, buffer truncation, and missing files
+
+The parser tests print the expected rejection diagnostics to `stderr`. CI runs the full suite under GCC and Clang with `-Werror`, again under AddressSanitizer and UndefinedBehaviorSanitizer, and runs `cppcheck` over `src/` and `tests/`.
 
 ## Mathematical Formulation
 
@@ -42,8 +73,8 @@ ROC_i = (h_i - h_(i-1)) / (t_i - t_(i-1))
 A frame is flagged `KIN` if either bound is violated:
 
 ```
-|ROC_i| > ROC_max                          ROC_max = 12.0 m/s
-|ROC_i - mu_w| / max(sigma_w, sigma_min) > 4.0   sigma_min = 1.5 m/s
+|ROC_i| > ROC_max                                  ROC_max   = 12.0 m/s
+|ROC_i - mu_w| / max(sigma_w, sigma_min) > 4.0     sigma_min = 1.5 m/s
 ```
 
 `mu_w` and `sigma_w` are the sample mean and standard deviation over a sliding window of the last 8 accepted ROC samples. Rejected samples are excluded from the window so a spoofed step cannot inflate `sigma_w` and mask the return transition. `sigma_min` is the 1 Hz GNSS vertical noise floor; it prevents the z-score from diverging during level flight.
@@ -69,17 +100,27 @@ J_i > 3.0   or   C/N0_i < 30 dB-Hz
 
 ```
 .
+|-- .github/workflows/ci.yml  GCC/Clang matrix, sanitizers, cppcheck
 |-- Makefile
-|-- README.md
 |-- data/
 |   `-- flight_log_04.csv     60 s fixed-wing segment: climb, cruise, jamming, altitude spoof
 |-- include/
-|   `-- telemetry.h           frame/result types, flag bits, public API
-`-- src/
-    |-- anomaly.c             window statistics, GNSS baseline, J score, detection
-    |-- main.c                CLI and report formatting
-    `-- parser.c              CSV ingest with per-record validation
+|   `-- telemetry.h           frame/result types, flag bits, public API contracts
+|-- src/
+|   |-- anomaly.c             window statistics, GNSS baseline, J score, detection
+|   |-- main.c                CLI and report formatting
+|   `-- parser.c              CSV ingest with per-record validation
+`-- tests/
+    |-- fixtures/edge_cases.csv
+    `-- test_telemetry.c
 ```
+
+## Design Notes
+
+- Fixed-capacity static buffers (`MAX_FRAMES = 4096`, about 68 min at 1 Hz) and no heap use, per rule 3 of the JPL "Power of Ten" guidelines for safety-critical C.
+- The detector is a single O(n) pass. The ROC window is a fixed 8-slot ring buffer, so per-frame cost is constant.
+- Detection is stateless across runs and deterministic: the same log always produces the same report.
+- Library code (`parser.c`, `anomaly.c`) is kept apart from I/O formatting (`main.c`), so the tests link against the library objects directly.
 
 ## Sample Output
 
@@ -109,3 +150,19 @@ flagged   : 11 / 60 frames  (KIN 2, EWJ 9)
 ```
 
 Frames 21-29: broadband L1 jamming onset and release; C/N0 drops 17 dB, HDOP rises ~6x, tracked SVs fall 11 to 6. Frames 38 and 41: a 64 m altitude step in and out of a spoofed solution, with no corresponding EW signature.
+
+## Limitations
+
+- `data/flight_log_04.csv` is a synthetic test vector. It was generated to exercise each detector path and was not recorded from an aircraft.
+- The baseline assumes the first 10 frames are free of interference. A log that starts inside a jammed area will under-report `J`.
+- Altitude is the only kinematic channel checked. Horizontal spoofing that keeps a plausible vertical profile, or a slow altitude drift under 4 sigma per frame, is not detected. Cross-checking against barometric altitude or IMU dead reckoning would close this gap.
+- Thresholds are fixed at compile time and sized for a small fixed-wing airframe at 1 Hz. Other platforms or sample rates need re-tuning.
+
+## References
+
+1. E. D. Kaplan and C. J. Hegarty, *Understanding GPS/GNSS: Principles and Applications*, 3rd ed. Artech House, 2017. (C/N0, tracking thresholds, DOP)
+2. P. Misra and P. Enge, *Global Positioning System: Signals, Measurements, and Performance*, 2nd ed. Ganga-Jamuna Press, 2006. (pseudorange error budget, `HDOP * sigma_UERE`)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
