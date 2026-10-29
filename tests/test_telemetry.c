@@ -64,6 +64,30 @@ static void test_ew_score(void)
     CHECK_NEAR(ew_jamming_score(&f, &base), 1.0, 1e-12);
 }
 
+static void test_missing_gnss_quality(void)
+{
+    uav_frame_t frames[15];
+    anomaly_result_t out[15];
+    gnss_baseline_t base;
+    size_t i;
+
+    for (i = 0; i < 15; i++) {
+        frames[i] = level_frame((double)i, 150.0);
+        frames[i].cn0_dbhz = NAN;
+    }
+    frames[12].hdop = 3.6;
+    base = gnss_baseline(frames, 15);
+    CHECK(isnan(base.cn0_dbhz));
+    CHECK_NEAR(base.hdop, 0.9, 1e-12);
+    CHECK_NEAR(ew_jamming_score(&frames[12], &base), 4.0, 1e-9);
+
+    for (i = 0; i < 15; i++)
+        frames[i].hdop = NAN;
+    base = gnss_baseline(frames, 15);
+    CHECK(isnan(ew_jamming_score(&frames[12], &base)));
+    CHECK(detect_anomalies(frames, 15, &base, out) == 0);
+}
+
 static void test_level_flight_is_clean(void)
 {
     uav_frame_t frames[30];
@@ -132,12 +156,13 @@ static void test_parser_rejects_bad_records(void)
     size_t n = 0;
 
     CHECK(parse_flight_log(FIXTURE, frames, 16, &n) == 0);
-    CHECK(n == 3);
-    if (n == 3) {
+    CHECK(n == 4);
+    if (n == 4) {
         CHECK_NEAR(frames[0].t_s, 0.0, 1e-12);
         CHECK_NEAR(frames[1].t_s, 5.0, 1e-12);
         CHECK_NEAR(frames[2].t_s, 7.0, 1e-12);
         CHECK(frames[2].sats == 11u);
+        CHECK(isnan(frames[3].cn0_dbhz) && isnan(frames[3].hdop));
     }
 
     CHECK(parse_flight_log(FIXTURE, frames, 2, &n) == 0);
@@ -151,6 +176,7 @@ int main(void)
 {
     test_window_stats();
     test_ew_score();
+    test_missing_gnss_quality();
     test_level_flight_is_clean();
     test_altitude_step_flags_kinematic();
     test_z_bound_below_hard_limit();

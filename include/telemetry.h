@@ -10,8 +10,8 @@ typedef struct {
     double lat_deg;      /* WGS-84 */
     double lon_deg;      /* WGS-84 */
     double alt_m;        /* GNSS altitude, m MSL */
-    double cn0_dbhz;     /* mean carrier-to-noise density of tracked SVs */
-    double hdop;
+    double cn0_dbhz;     /* mean C/N0 of tracked SVs; NaN if the log does not carry it */
+    double hdop;         /* NaN if the receiver does not report it */
     unsigned int sats;
 } uav_frame_t;
 
@@ -47,7 +47,10 @@ void window_stats(const double *x, size_t n, double *mean, double *sigma);
 /* Open-sky reference taken from the leading frames of the log. */
 gnss_baseline_t gnss_baseline(const uav_frame_t *frames, size_t n);
 
-/* Predicted horizontal-error growth factor relative to base; 1.0 at baseline. */
+/*
+ * Predicted horizontal-error growth factor relative to base; 1.0 at baseline.
+ * Missing C/N0 drops the signal-loss term; missing HDOP makes the result NaN.
+ */
 double ew_jamming_score(const uav_frame_t *f, const gnss_baseline_t *base);
 
 /* Fills out[0..n-1] and returns the number of frames with any flag set. */

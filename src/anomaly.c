@@ -40,18 +40,26 @@ void window_stats(const double *x, size_t n, double *mean, double *sigma)
 
 gnss_baseline_t gnss_baseline(const uav_frame_t *frames, size_t n)
 {
-    gnss_baseline_t b = { 0.0, 0.0 };
+    gnss_baseline_t b;
     const size_t nb = (n < BASELINE_FRAMES) ? n : BASELINE_FRAMES;
+    double cn0_sum = 0.0;
+    double hdop_sum = 0.0;
+    size_t n_cn0 = 0;
+    size_t n_hdop = 0;
     size_t i;
 
     for (i = 0; i < nb; i++) {
-        b.cn0_dbhz += frames[i].cn0_dbhz;
-        b.hdop += frames[i].hdop;
+        if (!isnan(frames[i].cn0_dbhz)) {
+            cn0_sum += frames[i].cn0_dbhz;
+            n_cn0++;
+        }
+        if (!isnan(frames[i].hdop)) {
+            hdop_sum += frames[i].hdop;
+            n_hdop++;
+        }
     }
-    if (nb > 0) {
-        b.cn0_dbhz /= (double)nb;
-        b.hdop /= (double)nb;
-    }
+    b.cn0_dbhz = (n_cn0 > 0) ? cn0_sum / (double)n_cn0 : NAN;
+    b.hdop = (n_hdop > 0) ? hdop_sum / (double)n_hdop : NAN;
     return b;
 }
 
@@ -59,9 +67,11 @@ double ew_jamming_score(const uav_frame_t *f, const gnss_baseline_t *base)
 {
     double cn0_loss_db = base->cn0_dbhz - f->cn0_dbhz;
 
-    if (base->hdop <= 0.0)
-        return 0.0;
-    if (cn0_loss_db < 0.0)
+    /* without HDOP there is no geometry term and J is undefined */
+    if (isnan(f->hdop) || !(base->hdop > 0.0))
+        return NAN;
+    /* C/N0 not logged: no evidence of signal loss, J reduces to the HDOP ratio */
+    if (isnan(cn0_loss_db) || cn0_loss_db < 0.0)
         cn0_loss_db = 0.0;
     /*
      * Pseudorange noise scales with (C/N0)^-1/2, i.e. a 20*log10 amplitude ratio,

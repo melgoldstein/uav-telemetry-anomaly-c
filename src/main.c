@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -23,6 +24,14 @@ static const char *flag_str(unsigned int flags)
     return buf;
 }
 
+static const char *opt_num(char *buf, size_t len, double v, int prec)
+{
+    if (isnan(v))
+        return "n/a";
+    snprintf(buf, len, "%.*f", prec, v);
+    return buf;
+}
+
 int main(int argc, char **argv)
 {
     const char *path = (argc > 1) ? argv[1] : DEFAULT_LOG;
@@ -32,6 +41,9 @@ int main(int argc, char **argv)
     size_t n_ewj = 0;
     size_t i;
     gnss_baseline_t base;
+    char cn0_buf[16];
+    char hdop_buf[16];
+    char j_buf[16];
 
     if (argc > 2) {
         fprintf(stderr, "usage: %s [flight_log.csv]\n", argv[0]);
@@ -49,7 +61,9 @@ int main(int argc, char **argv)
     printf("source    : %s\n", path);
     printf("frames    : %lu  (t = %.1f .. %.1f s)\n",
            (unsigned long)n, frames[0].t_s, frames[n - 1].t_s);
-    printf("baseline  : C/N0 %.1f dB-Hz, HDOP %.2f\n", base.cn0_dbhz, base.hdop);
+    printf("baseline  : C/N0 %s dB-Hz, HDOP %s\n",
+           opt_num(cn0_buf, sizeof cn0_buf, base.cn0_dbhz, 1),
+           opt_num(hdop_buf, sizeof hdop_buf, base.hdop, 2));
     printf("%s\n", RULE);
     printf("%7s %8s %9s %7s %6s %6s %3s %7s  %s\n",
            "t[s]", "alt[m]", "roc[m/s]", "roc_z", "C/N0", "HDOP", "SV", "J", "FLAGS");
@@ -64,10 +78,13 @@ int main(int argc, char **argv)
             n_kin++;
         if (r->flags & ANOM_EW_JAM)
             n_ewj++;
-        printf("%7.1f %8.1f %9.2f %7.2f %6.1f %6.2f %3u %7.2f  %s\n",
+        printf("%7.1f %8.1f %9.2f %7.2f %6s %6s %3u %7s  %s\n",
                frames[i].t_s, frames[i].alt_m, r->roc_mps, r->roc_z,
-               frames[i].cn0_dbhz, frames[i].hdop, frames[i].sats,
-               r->ew_jamming_score, flag_str(r->flags));
+               opt_num(cn0_buf, sizeof cn0_buf, frames[i].cn0_dbhz, 1),
+               opt_num(hdop_buf, sizeof hdop_buf, frames[i].hdop, 2),
+               frames[i].sats,
+               opt_num(j_buf, sizeof j_buf, r->ew_jamming_score, 2),
+               flag_str(r->flags));
     }
 
     printf("%s\n", RULE);
