@@ -1,0 +1,7 @@
+# PX4 Flight Review public logs, license CC-BY PX4 (https://review.px4.io/browse)
+# id                                    hardware                   px4            duration
+fa8a4cc9-b13a-463b-8d6f-529592b8c3d2    CUBEPILOT_CUBEORANGEPLUS   v1.14.3        8m30s
+36ecfadf-5010-4d72-8fad-0b4d5be492d0    IRONCLAD_IMX8MP_REVB       v1.18.0        14m19s
+ec71ea78-f9ef-47ad-9838-ea4fd27af572    CUBEPILOT_CUBEORANGEPLUS   v1.16.0        22m29s
+0ed09c07-7259-42a4-8fb7-e93d458d87ce    CUBEPILOT_CUBEORANGEPLUS   v1.16.0        35m0s
+1c87e004-5516-4751-a6dd-b334e9f401a5    PX4_FMU_V5                 v1.18.0-beta   12m58s
