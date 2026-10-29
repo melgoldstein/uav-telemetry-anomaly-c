@@ -15,11 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build (-Werror)
-        run: make CC=${{ matrix.cc }} EXTRA_CFLAGS=-Werror
+        run: make all tools CC=${{ matrix.cc }} EXTRA_CFLAGS=-Werror
       - name: Unit tests
         run: make test CC=${{ matrix.cc }} EXTRA_CFLAGS=-Werror
       - name: Reference log
         run: make run CC=${{ matrix.cc }}
+      - name: Real-flight regression (PX4 logs)
+        run: make validate CC=${{ matrix.cc }}
       - name: ASan + UBSan
         run: make sanitize CC=${{ matrix.cc }}
 
@@ -32,4 +34,4 @@ jobs:
       - name: cppcheck
         run: >
           cppcheck --std=c99 --enable=warning,style,performance,portability
-          --error-exitcode=1 --quiet -Iinclude src tests
+          --error-exitcode=1 --quiet -Iinclude src tests tools
