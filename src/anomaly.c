@@ -59,6 +59,8 @@ double ew_jamming_score(const uav_frame_t *f, const gnss_baseline_t *base)
 {
     double cn0_loss_db = base->cn0_dbhz - f->cn0_dbhz;
 
+    if (base->hdop <= 0.0)
+        return 0.0;
     if (cn0_loss_db < 0.0)
         cn0_loss_db = 0.0;
     /*
