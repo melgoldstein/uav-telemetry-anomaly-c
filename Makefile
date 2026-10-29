@@ -24,6 +24,9 @@ obj/%.o: src/%.c include/telemetry.h | obj
 obj/%.o: tests/%.c include/telemetry.h | obj
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
+bin/ulog2csv: tools/ulog2csv.c | bin
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
 bin obj:
 	mkdir -p $@
 
@@ -33,11 +36,18 @@ run: $(BIN)
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
+tools: bin/ulog2csv
+
+# Regression check against the committed real-flight results
+validate: $(BIN)
+	sh scripts/px4_summary.sh > obj/px4_summary.txt
+	diff -u data/px4/expected_summary.txt obj/px4_summary.txt
+
 # ASan/UBSan build; requires a toolchain with sanitizer runtimes (Linux gcc/clang)
 sanitize: clean
-	$(MAKE) test run EXTRA_CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"
+	$(MAKE) test run validate EXTRA_CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"
 
 clean:
 	rm -rf bin obj
 
-.PHONY: all run test sanitize clean
+.PHONY: all run test tools validate sanitize clean
