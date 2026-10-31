@@ -1,6 +1,8 @@
 # uav-telemetry-anomaly-c
 
-[![ci](https://github.com/cankaan120/uav-telemetry-anomaly-c/actions/workflows/ci.yml/badge.svg)](https://github.com/cankaan120/uav-telemetry-anomaly-c/actions/workflows/ci.yml)
+[Portfolio: melgoldstein.com](https://melgoldstein.com/)
+
+[![ci](https://github.com/melgoldstein/uav-telemetry-anomaly-c/actions/workflows/ci.yml/badge.svg)](https://github.com/melgoldstein/uav-telemetry-anomaly-c/actions/workflows/ci.yml)
 ![C99](https://img.shields.io/badge/std-C99-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
